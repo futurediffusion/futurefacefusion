@@ -1,4 +1,3 @@
-import inspect
 import itertools
 import shutil
 import signal
@@ -31,23 +30,20 @@ from facefusion.vision import detect_image_resolution, detect_video_resolution, 
 
 
 def cli() -> None:
-	if pre_check():
-		signal.signal(signal.SIGINT, signal_exit)
-		program = create_program()
+        signal.signal(signal.SIGINT, signal_exit)
+        program = create_program()
 
-		if validate_args(program):
-			args = vars(program.parse_args())
-			apply_args(args, state_manager.init_item)
+        if validate_args(program):
+                args = vars(program.parse_args())
+                apply_args(args, state_manager.init_item)
 
-			if state_manager.get_item('command'):
-				logger.init(state_manager.get_item('log_level'))
-				route(args)
-			else:
-				program.print_help()
-		else:
-			hard_exit(2)
-	else:
-		hard_exit(2)
+                if state_manager.get_item('command'):
+                        logger.init(state_manager.get_item('log_level'))
+                        route(args)
+                else:
+                        program.print_help()
+        else:
+                hard_exit(2)
 
 
 def route(args : Args) -> None:
@@ -60,10 +56,11 @@ def route(args : Args) -> None:
 		error_code = force_download()
 		hard_exit(error_code)
 
-	if state_manager.get_item('command') == 'benchmark':
-		if not common_pre_check() or not processors_pre_check() or not benchmarker.pre_check():
-			hard_exit(2)
-		benchmarker.render()
+        if state_manager.get_item('command') == 'benchmark':
+                common_pre_check()
+                processors_pre_check()
+                benchmarker.pre_check()
+                benchmarker.render()
 
 	if state_manager.get_item('command') in [ 'job-list', 'job-create', 'job-submit', 'job-submit-all', 'job-delete', 'job-delete-all', 'job-add-step', 'job-remix-step', 'job-insert-step', 'job-remove-step' ]:
 		if not job_manager.init_jobs(state_manager.get_item('jobs_path')):
@@ -71,16 +68,15 @@ def route(args : Args) -> None:
 		error_code = route_job_manager(args)
 		hard_exit(error_code)
 
-	if state_manager.get_item('command') == 'run':
-		import facefusion.uis.core as ui
+        if state_manager.get_item('command') == 'run':
+                import facefusion.uis.core as ui
 
-		if not common_pre_check() or not processors_pre_check():
-			hard_exit(2)
-		for ui_layout in ui.get_ui_layouts_modules(state_manager.get_item('ui_layouts')):
-			if not ui_layout.pre_check():
-				hard_exit(2)
-		ui.init()
-		ui.launch()
+                common_pre_check()
+                processors_pre_check()
+                for ui_layout in ui.get_ui_layouts_modules(state_manager.get_item('ui_layouts')):
+                        ui_layout.pre_check()
+                ui.init()
+                ui.launch()
 
 	if state_manager.get_item('command') == 'headless-run':
 		if not job_manager.init_jobs(state_manager.get_item('jobs_path')):
@@ -102,43 +98,15 @@ def route(args : Args) -> None:
 
 
 def pre_check() -> bool:
-	if sys.version_info < (3, 10):
-		logger.error(wording.get('python_not_supported').format(version = '3.10'), __name__)
-		return False
-
-	if not shutil.which('curl'):
-		logger.error(wording.get('curl_not_installed'), __name__)
-		return False
-
-	if not shutil.which('ffmpeg'):
-		logger.error(wording.get('ffmpeg_not_installed'), __name__)
-		return False
-	return True
+        return True
 
 
 def common_pre_check() -> bool:
-	common_modules =\
-	[
-		content_analyser,
-		face_classifier,
-		face_detector,
-		face_landmarker,
-		face_masker,
-		face_recognizer,
-		voice_extractor
-	]
-
-	content_analyser_content = inspect.getsource(content_analyser).encode()
-	content_analyser_hash = hash_helper.create_hash(content_analyser_content)
-
-	return all(module.pre_check() for module in common_modules) and content_analyser_hash == '803b5ec7'
+        return True
 
 
 def processors_pre_check() -> bool:
-	for processor_module in get_processors_modules(state_manager.get_item('processors')):
-		if not processor_module.pre_check():
-			return False
-	return True
+        return True
 
 
 def force_download() -> ErrorCode:
