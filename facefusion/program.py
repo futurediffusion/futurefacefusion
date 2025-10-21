@@ -56,8 +56,8 @@ def create_target_path_program() -> ArgumentParser:
 	program = ArgumentParser(add_help = False)
 	group_paths = program.add_argument_group('paths')
 	group_paths.add_argument('-t', '--target-path', help = wording.get('help.target_path'), default = config.get_str_value('paths', 'target_path'))
-	job_store.register_step_keys([ 'target_path' ])
-	return program
+        job_store.register_step_keys([ 'target_path', 'target_paths' ])
+        return program
 
 
 def create_output_path_program() -> ArgumentParser:

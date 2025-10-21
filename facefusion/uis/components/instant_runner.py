@@ -1,5 +1,7 @@
+from copy import deepcopy
+from pathlib import Path
 from time import sleep
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import gradio
 
@@ -73,28 +75,97 @@ def start() -> Tuple[gradio.Button, gradio.Button]:
 
 
 def run() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
-	step_args = collect_step_args()
-	output_path = step_args.get('output_path')
+        step_args = collect_step_args()
+        target_paths : List[str] = step_args.get('target_paths') or []
+        output_path = step_args.get('output_path')
 
-	if is_directory(step_args.get('output_path')):
-		step_args['output_path'] = suggest_output_path(step_args.get('output_path'), state_manager.get_item('target_path'))
-	if job_manager.init_jobs(state_manager.get_item('jobs_path')):
-		create_and_run_job(step_args)
-		state_manager.set_item('output_path', output_path)
-	if is_image(step_args.get('output_path')):
-		return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = step_args.get('output_path'), visible = True), gradio.Video(value = None, visible = False)
-	if is_video(step_args.get('output_path')):
-		return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None, visible = False), gradio.Video(value = step_args.get('output_path'), visible = True)
+        if len(target_paths) <= 1 and is_directory(step_args.get('output_path')):
+                step_args['output_path'] = suggest_output_path(step_args.get('output_path'), state_manager.get_item('target_path'))
+        if job_manager.init_jobs(state_manager.get_item('jobs_path')):
+                create_and_run_job(step_args)
+                step_args['output_path'] = output_path
+                state_manager.set_item('output_path', output_path)
+        if is_image(step_args.get('output_path')):
+                return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = step_args.get('output_path'), visible = True), gradio.Video(value = None, visible = False)
+        if is_video(step_args.get('output_path')):
+                return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None, visible = False), gradio.Video(value = step_args.get('output_path'), visible = True)
 	return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None)
 
 
 def create_and_run_job(step_args : Args) -> bool:
-	job_id = job_helper.suggest_job_id('ui')
+        for key in job_store.get_job_keys():
+                state_manager.sync_item(key) #type:ignore[arg-type]
 
-	for key in job_store.get_job_keys():
-		state_manager.sync_item(key) #type:ignore[arg-type]
+        target_paths : List[str] = step_args.get('target_paths') or []
 
-	return job_manager.create_job(job_id) and job_manager.add_step(job_id, step_args) and job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
+        if len(target_paths) > 1:
+                return create_and_run_batch_job(step_args, target_paths)
+
+        return create_and_run_single_job(step_args, target_paths)
+
+
+def create_and_run_single_job(step_args : Args, target_paths : List[str]) -> bool:
+        job_id = job_helper.suggest_job_id('ui')
+        normalized_step_args = deepcopy(step_args)
+        target_path = normalized_step_args.get('target_path')
+
+        if target_path:
+                normalized_step_args['target_paths'] = [ target_path ]
+        else:
+                normalized_step_args['target_paths'] = target_paths
+
+        return job_manager.create_job(job_id) and job_manager.add_step(job_id, normalized_step_args) and job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
+
+
+def create_and_run_batch_job(step_args : Args, target_paths : List[str]) -> bool:
+        job_id = job_helper.suggest_job_id('ui')
+        base_output_path = step_args.get('output_path')
+
+        if not job_manager.create_job(job_id):
+                return False
+
+        for index, target_path in enumerate(target_paths):
+                batch_step_args = deepcopy(step_args)
+                batch_step_args['target_path'] = target_path
+                batch_step_args['target_paths'] = [ target_path ]
+                batch_step_args['output_path'] = compose_batch_output_path(base_output_path, target_path, index, len(target_paths))
+
+                if not job_manager.add_step(job_id, batch_step_args):
+                        return False
+
+        return job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
+
+
+def compose_batch_output_path(base_output_path : Optional[str], target_path : str, index : int, total : int) -> str:
+        target_path_obj = Path(target_path)
+        target_suffix = target_path_obj.suffix or ''
+        target_stem = target_path_obj.stem or f'target-{index:03d}'
+
+        if base_output_path and is_directory(base_output_path):
+                directory_path = Path(base_output_path)
+                suffix = target_suffix
+                batch_suffix = f'-{index:03d}' if total > 1 else ''
+                file_name = f"{target_stem}-faceswap{batch_suffix}{suffix}"
+                return str(directory_path / file_name)
+
+        if base_output_path:
+                base_path = Path(base_output_path)
+                suffix = base_path.suffix or target_suffix
+                base_stem = base_path.stem or target_stem
+
+                if total == 1:
+                        return str(base_path)
+
+                batch_suffix = f"-faceswap-{index:03d}"
+                if suffix:
+                        file_name = f"{base_stem}{batch_suffix}{suffix}"
+                else:
+                        file_name = f"{base_stem}{batch_suffix}"
+                return str(base_path.with_name(file_name))
+
+        batch_suffix = f"-faceswap-{index:03d}"
+        file_name = f"{target_stem}{batch_suffix}{target_suffix}" if target_suffix else f"{target_stem}{batch_suffix}"
+        return str(target_path_obj.with_name(file_name))
 
 
 def stop() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
