@@ -22,160 +22,160 @@ INSTANT_RUNNER_CLEAR_BUTTON : Optional[gradio.Button] = None
 
 
 def render() -> None:
-	global INSTANT_RUNNER_WRAPPER
-	global INSTANT_RUNNER_START_BUTTON
-	global INSTANT_RUNNER_STOP_BUTTON
-	global INSTANT_RUNNER_CLEAR_BUTTON
+    global INSTANT_RUNNER_WRAPPER
+    global INSTANT_RUNNER_START_BUTTON
+    global INSTANT_RUNNER_STOP_BUTTON
+    global INSTANT_RUNNER_CLEAR_BUTTON
 
-	if job_manager.init_jobs(state_manager.get_item('jobs_path')):
-		is_instant_runner = state_manager.get_item('ui_workflow') == 'instant_runner'
+    if job_manager.init_jobs(state_manager.get_item('jobs_path')):
+        is_instant_runner = state_manager.get_item('ui_workflow') == 'instant_runner'
 
-		with gradio.Row(visible = is_instant_runner) as INSTANT_RUNNER_WRAPPER:
-			INSTANT_RUNNER_START_BUTTON = gradio.Button(
-				value = wording.get('uis.start_button'),
-				variant = 'primary',
-				size = 'sm'
-			)
-			INSTANT_RUNNER_STOP_BUTTON = gradio.Button(
-				value = wording.get('uis.stop_button'),
-				variant = 'primary',
-				size = 'sm',
-				visible = False
-			)
-			INSTANT_RUNNER_CLEAR_BUTTON = gradio.Button(
-				value = wording.get('uis.clear_button'),
-				size = 'sm'
-			)
+        with gradio.Row(visible = is_instant_runner) as INSTANT_RUNNER_WRAPPER:
+            INSTANT_RUNNER_START_BUTTON = gradio.Button(
+                value = wording.get('uis.start_button'),
+                variant = 'primary',
+                size = 'sm'
+            )
+            INSTANT_RUNNER_STOP_BUTTON = gradio.Button(
+                value = wording.get('uis.stop_button'),
+                variant = 'primary',
+                size = 'sm',
+                visible = False
+            )
+            INSTANT_RUNNER_CLEAR_BUTTON = gradio.Button(
+                value = wording.get('uis.clear_button'),
+                size = 'sm'
+            )
 
 
 def listen() -> None:
-	output_image = get_ui_component('output_image')
-	output_video = get_ui_component('output_video')
-	ui_workflow_dropdown = get_ui_component('ui_workflow_dropdown')
+    output_image = get_ui_component('output_image')
+    output_video = get_ui_component('output_video')
+    ui_workflow_dropdown = get_ui_component('ui_workflow_dropdown')
 
-	if output_image and output_video:
-		INSTANT_RUNNER_START_BUTTON.click(start, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON ])
-		INSTANT_RUNNER_START_BUTTON.click(run, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON, output_image, output_video ])
-		INSTANT_RUNNER_STOP_BUTTON.click(stop, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON, output_image, output_video ])
-		INSTANT_RUNNER_CLEAR_BUTTON.click(clear, outputs = [ output_image, output_video ])
-	if ui_workflow_dropdown:
-		ui_workflow_dropdown.change(remote_update, inputs = ui_workflow_dropdown, outputs = INSTANT_RUNNER_WRAPPER)
+    if output_image and output_video:
+        INSTANT_RUNNER_START_BUTTON.click(start, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON ])
+        INSTANT_RUNNER_START_BUTTON.click(run, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON, output_image, output_video ])
+        INSTANT_RUNNER_STOP_BUTTON.click(stop, outputs = [ INSTANT_RUNNER_START_BUTTON, INSTANT_RUNNER_STOP_BUTTON, output_image, output_video ])
+        INSTANT_RUNNER_CLEAR_BUTTON.click(clear, outputs = [ output_image, output_video ])
+    if ui_workflow_dropdown:
+        ui_workflow_dropdown.change(remote_update, inputs = ui_workflow_dropdown, outputs = INSTANT_RUNNER_WRAPPER)
 
 
 def remote_update(ui_workflow : UiWorkflow) -> gradio.Row:
-	is_instant_runner = ui_workflow == 'instant_runner'
+    is_instant_runner = ui_workflow == 'instant_runner'
 
-	return gradio.Row(visible = is_instant_runner)
+    return gradio.Row(visible = is_instant_runner)
 
 
 def start() -> Tuple[gradio.Button, gradio.Button]:
-	while not process_manager.is_processing():
-		sleep(0.5)
-	return gradio.Button(visible = False), gradio.Button(visible = True)
+    while not process_manager.is_processing():
+        sleep(0.5)
+    return gradio.Button(visible = False), gradio.Button(visible = True)
 
 
 def run() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
-        step_args = collect_step_args()
-        target_paths : List[str] = step_args.get('target_paths') or []
-        output_path = step_args.get('output_path')
+    step_args = collect_step_args()
+    target_paths : List[str] = step_args.get('target_paths') or []
+    output_path = step_args.get('output_path')
 
-        if len(target_paths) <= 1 and is_directory(step_args.get('output_path')):
-                step_args['output_path'] = suggest_output_path(step_args.get('output_path'), state_manager.get_item('target_path'))
-        if job_manager.init_jobs(state_manager.get_item('jobs_path')):
-                create_and_run_job(step_args)
-                step_args['output_path'] = output_path
-                state_manager.set_item('output_path', output_path)
-        if is_image(step_args.get('output_path')):
-                return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = step_args.get('output_path'), visible = True), gradio.Video(value = None, visible = False)
-        if is_video(step_args.get('output_path')):
-                return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None, visible = False), gradio.Video(value = step_args.get('output_path'), visible = True)
-	return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None)
+    if len(target_paths) <= 1 and is_directory(step_args.get('output_path')):
+        step_args['output_path'] = suggest_output_path(step_args.get('output_path'), state_manager.get_item('target_path'))
+    if job_manager.init_jobs(state_manager.get_item('jobs_path')):
+        create_and_run_job(step_args)
+        step_args['output_path'] = output_path
+        state_manager.set_item('output_path', output_path)
+    if is_image(step_args.get('output_path')):
+        return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = step_args.get('output_path'), visible = True), gradio.Video(value = None, visible = False)
+    if is_video(step_args.get('output_path')):
+        return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None, visible = False), gradio.Video(value = step_args.get('output_path'), visible = True)
+    return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None)
 
 
 def create_and_run_job(step_args : Args) -> bool:
-        for key in job_store.get_job_keys():
-                state_manager.sync_item(key) #type:ignore[arg-type]
+    for key in job_store.get_job_keys():
+        state_manager.sync_item(key) #type:ignore[arg-type]
 
-        target_paths : List[str] = step_args.get('target_paths') or []
+    target_paths : List[str] = step_args.get('target_paths') or []
 
-        if len(target_paths) > 1:
-                return create_and_run_batch_job(step_args, target_paths)
+    if len(target_paths) > 1:
+        return create_and_run_batch_job(step_args, target_paths)
 
-        return create_and_run_single_job(step_args, target_paths)
+    return create_and_run_single_job(step_args, target_paths)
 
 
 def create_and_run_single_job(step_args : Args, target_paths : List[str]) -> bool:
-        job_id = job_helper.suggest_job_id('ui')
-        normalized_step_args = deepcopy(step_args)
-        target_path = normalized_step_args.get('target_path')
+    job_id = job_helper.suggest_job_id('ui')
+    normalized_step_args = deepcopy(step_args)
+    target_path = normalized_step_args.get('target_path')
 
-        if target_path:
-                normalized_step_args['target_paths'] = [ target_path ]
-        else:
-                normalized_step_args['target_paths'] = target_paths
+    if target_path:
+        normalized_step_args['target_paths'] = [ target_path ]
+    else:
+        normalized_step_args['target_paths'] = target_paths
 
-        return job_manager.create_job(job_id) and job_manager.add_step(job_id, normalized_step_args) and job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
+    return job_manager.create_job(job_id) and job_manager.add_step(job_id, normalized_step_args) and job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
 
 
 def create_and_run_batch_job(step_args : Args, target_paths : List[str]) -> bool:
-        job_id = job_helper.suggest_job_id('ui')
-        base_output_path = step_args.get('output_path')
+    job_id = job_helper.suggest_job_id('ui')
+    base_output_path = step_args.get('output_path')
 
-        if not job_manager.create_job(job_id):
-                return False
+    if not job_manager.create_job(job_id):
+        return False
 
-        for index, target_path in enumerate(target_paths):
-                batch_step_args = deepcopy(step_args)
-                batch_step_args['target_path'] = target_path
-                batch_step_args['target_paths'] = [ target_path ]
-                batch_step_args['output_path'] = compose_batch_output_path(base_output_path, target_path, index, len(target_paths))
+    for index, target_path in enumerate(target_paths):
+        batch_step_args = deepcopy(step_args)
+        batch_step_args['target_path'] = target_path
+        batch_step_args['target_paths'] = [ target_path ]
+        batch_step_args['output_path'] = compose_batch_output_path(base_output_path, target_path, index, len(target_paths))
 
-                if not job_manager.add_step(job_id, batch_step_args):
-                        return False
+        if not job_manager.add_step(job_id, batch_step_args):
+            return False
 
-        return job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
+    return job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
 
 
 def compose_batch_output_path(base_output_path : Optional[str], target_path : str, index : int, total : int) -> str:
-        target_path_obj = Path(target_path)
-        target_suffix = target_path_obj.suffix or ''
-        target_stem = target_path_obj.stem or f'target-{index:03d}'
+    target_path_obj = Path(target_path)
+    target_suffix = target_path_obj.suffix or ''
+    target_stem = target_path_obj.stem or f'target-{index:03d}'
 
-        if base_output_path and is_directory(base_output_path):
-                directory_path = Path(base_output_path)
-                suffix = target_suffix
-                batch_suffix = f'-{index:03d}' if total > 1 else ''
-                file_name = f"{target_stem}-faceswap{batch_suffix}{suffix}"
-                return str(directory_path / file_name)
+    if base_output_path and is_directory(base_output_path):
+        directory_path = Path(base_output_path)
+        suffix = target_suffix
+        batch_suffix = f'-{index:03d}' if total > 1 else ''
+        file_name = f"{target_stem}-faceswap{batch_suffix}{suffix}"
+        return str(directory_path / file_name)
 
-        if base_output_path:
-                base_path = Path(base_output_path)
-                suffix = base_path.suffix or target_suffix
-                base_stem = base_path.stem or target_stem
+    if base_output_path:
+        base_path = Path(base_output_path)
+        suffix = base_path.suffix or target_suffix
+        base_stem = base_path.stem or target_stem
 
-                if total == 1:
-                        return str(base_path)
-
-                batch_suffix = f"-faceswap-{index:03d}"
-                if suffix:
-                        file_name = f"{base_stem}{batch_suffix}{suffix}"
-                else:
-                        file_name = f"{base_stem}{batch_suffix}"
-                return str(base_path.with_name(file_name))
+        if total == 1:
+            return str(base_path)
 
         batch_suffix = f"-faceswap-{index:03d}"
-        file_name = f"{target_stem}{batch_suffix}{target_suffix}" if target_suffix else f"{target_stem}{batch_suffix}"
-        return str(target_path_obj.with_name(file_name))
+        if suffix:
+            file_name = f"{base_stem}{batch_suffix}{suffix}"
+        else:
+            file_name = f"{base_stem}{batch_suffix}"
+        return str(base_path.with_name(file_name))
+
+    batch_suffix = f"-faceswap-{index:03d}"
+    file_name = f"{target_stem}{batch_suffix}{target_suffix}" if target_suffix else f"{target_stem}{batch_suffix}"
+    return str(target_path_obj.with_name(file_name))
 
 
 def stop() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
-	process_manager.stop()
-	return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None)
+    process_manager.stop()
+    return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None)
 
 
 def clear() -> Tuple[gradio.Image, gradio.Video]:
-	while process_manager.is_processing():
-		sleep(0.5)
-	if state_manager.get_item('target_path'):
-		clear_temp_directory(state_manager.get_item('target_path'))
-	return gradio.Image(value = None), gradio.Video(value = None)
+    while process_manager.is_processing():
+        sleep(0.5)
+    if state_manager.get_item('target_path'):
+        clear_temp_directory(state_manager.get_item('target_path'))
+    return gradio.Image(value = None), gradio.Video(value = None)
