@@ -543,9 +543,26 @@ def forward_swap_face(source_face : Face, target_face : Face, crop_vision_frame 
     model_type = get_model_options().get('type')
     face_swapper_inputs = {}
 
+    def ensure_channels_first(vision_frame : VisionFrame) -> VisionFrame:
+        if vision_frame.ndim == 4:
+            vision_frame = vision_frame[0]
+
+        if vision_frame.ndim == 3:
+            if vision_frame.shape[0] in (1, 3):
+                return vision_frame
+
+            if vision_frame.shape[-1] in (1, 3):
+                return vision_frame.transpose(2, 0, 1)
+
+        if vision_frame.ndim == 2:
+            return numpy.expand_dims(vision_frame, axis = 0)
+
+        logger.error(f'face swapper returned frame with unsupported shape: {vision_frame.shape}', __name__)
+        return vision_frame
+
     if face_swapper is None:
         logger.error('face swapper model is not loaded. Please download the model before running face swap.', __name__)
-        return crop_vision_frame
+        return ensure_channels_first(crop_vision_frame)
 
     if is_macos() and has_execution_provider('coreml') and model_type in [ 'ghost', 'uniface' ]:
         face_swapper.set_providers([ facefusion.choices.execution_provider_set.get('cpu') ])
@@ -562,8 +579,13 @@ def forward_swap_face(source_face : Face, target_face : Face, crop_vision_frame 
             face_swapper_inputs[face_swapper_input.name] = crop_vision_frame
 
     with conditional_thread_semaphore():
-        crop_vision_frame = face_swapper.run(None, face_swapper_inputs)[0][0]
+        face_swapper_outputs = face_swapper.run(None, face_swapper_inputs)
 
+    if not face_swapper_outputs:
+        logger.error('face swapper inference returned no output.', __name__)
+        return ensure_channels_first(crop_vision_frame)
+
+    crop_vision_frame = ensure_channels_first(face_swapper_outputs[0])
     return crop_vision_frame
 
 
