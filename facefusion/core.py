@@ -106,6 +106,12 @@ def common_pre_check() -> bool:
 
 
 def processors_pre_check() -> bool:
+    processors = state_manager.get_item('processors') or []
+
+    for processor_module in get_processors_modules(processors):
+        if not processor_module.pre_check():
+            return False
+
     return True
 
 
