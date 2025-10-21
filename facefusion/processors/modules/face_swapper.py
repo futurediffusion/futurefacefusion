@@ -539,15 +539,19 @@ def swap_face(source_face : Face, target_face : Face, temp_vision_frame : Vision
 
 
 def forward_swap_face(source_face : Face, target_face : Face, crop_vision_frame : VisionFrame) -> VisionFrame:
-	face_swapper = get_inference_pool().get('face_swapper')
-	model_type = get_model_options().get('type')
-	face_swapper_inputs = {}
+        face_swapper = get_inference_pool().get('face_swapper')
+        model_type = get_model_options().get('type')
+        face_swapper_inputs = {}
 
-	if is_macos() and has_execution_provider('coreml') and model_type in [ 'ghost', 'uniface' ]:
-		face_swapper.set_providers([ facefusion.choices.execution_provider_set.get('cpu') ])
+        if face_swapper is None:
+                logger.error('face swapper model is not loaded. Please download the model before running face swap.', __name__)
+                return crop_vision_frame
 
-	for face_swapper_input in face_swapper.get_inputs():
-		if face_swapper_input.name == 'source':
+        if is_macos() and has_execution_provider('coreml') and model_type in [ 'ghost', 'uniface' ]:
+                face_swapper.set_providers([ facefusion.choices.execution_provider_set.get('cpu') ])
+
+        for face_swapper_input in face_swapper.get_inputs():
+                if face_swapper_input.name == 'source':
 			if model_type in [ 'blendswap', 'uniface' ]:
 				face_swapper_inputs[face_swapper_input.name] = prepare_source_frame(source_face)
 			else:
