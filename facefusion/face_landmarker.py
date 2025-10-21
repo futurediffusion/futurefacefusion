@@ -4,7 +4,7 @@ from typing import Tuple
 import cv2
 import numpy
 
-from facefusion import inference_manager, state_manager
+from facefusion import inference_manager, logger, state_manager
 from facefusion.download import conditional_download_hashes, conditional_download_sources, resolve_download_url
 from facefusion.face_helper import create_rotation_matrix_and_size, estimate_matrix_by_face_landmark_5, transform_points, warp_face_by_translation
 from facefusion.filesystem import resolve_relative_path
@@ -79,10 +79,22 @@ def create_static_model_set(download_scope : DownloadScope) -> ModelSet:
 
 
 def get_inference_pool() -> InferencePool:
-	model_names = [ state_manager.get_item('face_landmarker_model'), 'fan_68_5' ]
-	_, model_source_set = collect_model_downloads()
+        model_names = [ state_manager.get_item('face_landmarker_model'), 'fan_68_5' ]
+        if not pre_check():
+                logger.error('Unable to download face landmarker models.', __name__)
+                raise RuntimeError('Face landmarker models are not available.')
 
-	return inference_manager.get_inference_pool(__name__, model_names, model_source_set)
+        _, model_source_set = collect_model_downloads()
+        inference_pool = inference_manager.get_inference_pool(__name__, model_names, model_source_set)
+        expected_models = [ model_name for model_name in model_source_set.keys() if model_name ]
+        missing_models = [ model_name for model_name in expected_models if model_name not in inference_pool ]
+
+        if missing_models:
+                missing_models_message = ', '.join(missing_models)
+                logger.error(f'Missing face landmarker models: {missing_models_message}', __name__)
+                raise RuntimeError(f"Missing face landmarker models: {missing_models_message}")
+
+        return inference_pool
 
 
 def clear_inference_pool() -> None:
