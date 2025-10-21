@@ -1,6 +1,8 @@
 from functools import lru_cache
 from typing import List, Sequence, Tuple
 
+from onnxruntime import InferenceSession
+
 import cv2
 import numpy
 
@@ -359,52 +361,69 @@ def detect_with_yunet(vision_frame : VisionFrame, face_detector_size : str) -> T
 	return bounding_boxes, face_scores, face_landmarks_5
 
 
+def resolve_face_detector_session(model_name : str) -> InferenceSession:
+        inference_pool = get_inference_pool()
+        face_detector_session = inference_pool.get(model_name) if inference_pool else None
+
+        if face_detector_session is None:
+                if not pre_check():
+                        raise RuntimeError(f'Unable to download required files for face detector model "{model_name}".')
+                clear_inference_pool()
+                inference_pool = get_inference_pool()
+                face_detector_session = inference_pool.get(model_name) if inference_pool else None
+
+        if face_detector_session is None:
+                raise RuntimeError(f'Face detector model "{model_name}" could not be initialized. Verify that the model files exist and that the configured execution providers support it.')
+
+        return face_detector_session
+
+
 def forward_with_retinaface(detect_vision_frame : VisionFrame) -> Detection:
-	face_detector = get_inference_pool().get('retinaface')
+        face_detector = resolve_face_detector_session('retinaface')
 
-	with thread_semaphore():
-		detection = face_detector.run(None,
-		{
-			'input': detect_vision_frame
-		})
+        with thread_semaphore():
+                detection = face_detector.run(None,
+                {
+                        'input': detect_vision_frame
+                })
 
-	return detection
+        return detection
 
 
 def forward_with_scrfd(detect_vision_frame : VisionFrame) -> Detection:
-	face_detector = get_inference_pool().get('scrfd')
+        face_detector = resolve_face_detector_session('scrfd')
 
-	with thread_semaphore():
-		detection = face_detector.run(None,
-		{
-			'input': detect_vision_frame
-		})
+        with thread_semaphore():
+                detection = face_detector.run(None,
+                {
+                        'input': detect_vision_frame
+                })
 
-	return detection
+        return detection
 
 
 def forward_with_yolo_face(detect_vision_frame : VisionFrame) -> Detection:
-	face_detector = get_inference_pool().get('yolo_face')
+        face_detector = resolve_face_detector_session('yolo_face')
 
-	with thread_semaphore():
-		detection = face_detector.run(None,
-		{
-			'input': detect_vision_frame
-		})
+        with thread_semaphore():
+                detection = face_detector.run(None,
+                {
+                        'input': detect_vision_frame
+                })
 
-	return detection
+        return detection
 
 
 def forward_with_yunet(detect_vision_frame : VisionFrame) -> Detection:
-	face_detector = get_inference_pool().get('yunet')
+        face_detector = resolve_face_detector_session('yunet')
 
-	with thread_semaphore():
-		detection = face_detector.run(None,
-		{
-			'input': detect_vision_frame
-		})
+        with thread_semaphore():
+                detection = face_detector.run(None,
+                {
+                        'input': detect_vision_frame
+                })
 
-	return detection
+        return detection
 
 
 def prepare_detect_frame(temp_vision_frame : VisionFrame, face_detector_size : str) -> VisionFrame:
