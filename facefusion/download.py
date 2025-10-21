@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 import facefusion.choices
 from facefusion import curl_builder, logger, process_manager, state_manager, wording
-from facefusion.filesystem import get_file_name, get_file_size, is_file, remove_file
+from facefusion.filesystem import create_directory, get_file_name, get_file_size, is_file, remove_file
 from facefusion.hash_helper import validate_hash
 from facefusion.types import Commands, DownloadProvider, DownloadSet
 
@@ -25,7 +25,9 @@ def conditional_download(download_directory_path : str, urls : List[str]) -> Non
 		initial_size = get_file_size(download_file_path)
 		download_size = get_static_download_size(url)
 
-		if initial_size < download_size:
+		create_directory(download_directory_path)
+
+                if initial_size < download_size:
 			with tqdm(total = download_size, initial = initial_size, desc = wording.get('downloading'), unit = 'B', unit_scale = True, unit_divisor = 1024, ascii = ' =', disable = state_manager.get_item('log_level') in [ 'warn', 'error' ]) as progress:
 				commands = curl_builder.chain(
 					curl_builder.download(url, download_file_path),
