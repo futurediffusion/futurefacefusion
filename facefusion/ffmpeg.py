@@ -38,6 +38,13 @@ def run_ffmpeg_with_progress(commands : Commands, update_progress : UpdateProgre
             continue
         return process
 
+    if process_manager.is_stopping():
+        process.terminate()
+    else:
+        if log_level == 'debug':
+            log_debug(process)
+        process.wait()
+
     return process
 
 
@@ -61,6 +68,10 @@ def run_ffmpeg(commands : Commands) -> subprocess.Popen[bytes]:
 
     if process_manager.is_stopping():
         process.terminate()
+    else:
+        if log_level == 'debug':
+            log_debug(process)
+        process.wait()
 
     return process
 
