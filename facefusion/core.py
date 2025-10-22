@@ -409,6 +409,17 @@ def process_image(start_time : float) -> ErrorCode:
     logger.info(wording.get('finalizing_image').format(resolution = pack_resolution(output_image_resolution)), __name__)
     if finalize_image(state_manager.get_item('target_path'), state_manager.get_item('output_path'), output_image_resolution):
         logger.debug(wording.get('finalizing_image_succeeded'), __name__)
+        # CRITICAL DEBUG - Verify file was actually saved
+        output_path = state_manager.get_item('output_path')
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            logger.info(f'[BATCH DEBUG] ✅ OUTPUT FILE CONFIRMED: {output_path} ({file_size} bytes)', __name__)
+        else:
+            logger.error(f'[BATCH DEBUG] ❌ OUTPUT FILE MISSING: {output_path}', __name__)
+            temp_file = get_temp_file_path(state_manager.get_item('target_path'))
+            if os.path.exists(temp_file):
+                logger.error(f'[BATCH DEBUG] ⚠️ TEMP FILE EXISTS: {temp_file}', __name__)
+                logger.error(f'[BATCH DEBUG] ⚠️ File was NOT moved from temp to output!', __name__)
     else:
         logger.warn(wording.get('finalizing_image_skipped'), __name__)
 
