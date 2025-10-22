@@ -5,11 +5,13 @@ import signal
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
+from typing import Optional
 
 import numpy
 from tqdm import tqdm
 
 from facefusion import benchmarker, cli_helper, content_analyser, face_classifier, face_detector, face_landmarker, face_masker, face_recognizer, hash_helper, logger, process_manager, state_manager, video_manager, voice_extractor, wording
+from facefusion.batch_helper import compose_batch_output_path
 from facefusion.args import apply_args, collect_job_args, reduce_job_args, reduce_step_args
 from facefusion.audio import create_empty_audio_frame, get_audio_frame, get_voice_frame
 from facefusion.common_helper import get_first
@@ -28,6 +30,15 @@ from facefusion.temp_helper import clear_temp_directory, create_temp_directory, 
 from facefusion.time_helper import calculate_end_time
 from facefusion.types import Args, ErrorCode
 from facefusion.vision import detect_image_resolution, detect_video_resolution, pack_resolution, read_static_image, read_static_images, read_static_video_frame, restrict_image_resolution, restrict_trim_frame, restrict_video_fps, restrict_video_resolution, scale_resolution, write_image
+
+
+def resolve_batch_output_path(base_output_path: Optional[str], target_path: str, index: int, total: int) -> str:
+    if base_output_path:
+        try:
+            return base_output_path.format(index = index)
+        except (IndexError, KeyError, ValueError):
+            pass
+    return compose_batch_output_path(base_output_path, target_path, index, total)
 
 
 def cli() -> None:
@@ -273,22 +284,27 @@ def process_batch(args : Args) -> ErrorCode:
     job_args = reduce_job_args(args)
     source_paths = resolve_file_pattern(job_args.get('source_pattern'))
     target_paths = resolve_file_pattern(job_args.get('target_pattern'))
+    base_output_path = job_args.get('output_pattern')
 
     if job_manager.create_job(job_id):
         if source_paths and target_paths:
+            total = len(source_paths) * len(target_paths)
             for index, (source_path, target_path) in enumerate(itertools.product(source_paths, target_paths)):
                 step_args['source_paths'] = [ source_path ]
                 step_args['target_path'] = target_path
-                step_args['output_path'] = job_args.get('output_pattern').format(index = index)
+                step_args['target_paths'] = [ target_path ]
+                step_args['output_path'] = resolve_batch_output_path(base_output_path, target_path, index, total)
                 if not job_manager.add_step(job_id, step_args):
                     return 1
             if job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step):
                 return 0
 
         if not source_paths and target_paths:
+            total = len(target_paths)
             for index, target_path in enumerate(target_paths):
                 step_args['target_path'] = target_path
-                step_args['output_path'] = job_args.get('output_pattern').format(index = index)
+                step_args['target_paths'] = [ target_path ]
+                step_args['output_path'] = resolve_batch_output_path(base_output_path, target_path, index, total)
                 if not job_manager.add_step(job_id, step_args):
                     return 1
             if job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step):

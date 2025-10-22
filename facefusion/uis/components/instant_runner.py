@@ -1,11 +1,11 @@
 from copy import deepcopy
-from pathlib import Path
 from time import sleep
 from typing import List, Optional, Tuple
 
 import gradio
 
 from facefusion import process_manager, state_manager, wording
+from facefusion.batch_helper import compose_batch_output_path
 from facefusion.args import collect_step_args
 from facefusion.core import process_step
 from facefusion.filesystem import is_directory, is_image, is_video
@@ -171,41 +171,6 @@ def create_and_run_batch_job(step_args : Args, target_paths : List[str]) -> bool
             return False
 
     return job_manager.submit_job(job_id) and job_runner.run_job(job_id, process_step)
-
-
-def compose_batch_output_path(base_output_path : Optional[str], target_path : str, index : int, total : int) -> str:
-    target_path_obj = Path(target_path)
-    target_suffix = target_path_obj.suffix or ''
-    target_stem = target_path_obj.stem or f'target-{index:03d}'
-
-    if base_output_path:
-        base_path = Path(base_output_path)
-        base_suffix = base_path.suffix
-        base_stem = base_path.stem or target_stem
-
-        if is_directory(base_output_path) or (not base_suffix and not base_path.exists()):
-            directory_path = base_path
-            suffix = target_suffix or base_suffix
-            batch_suffix = f'-{index:03d}' if total > 1 else ''
-            file_name = f"{target_stem}-faceswap{batch_suffix}{suffix}"
-            return str(directory_path / file_name)
-
-        suffix = base_suffix or target_suffix
-        if total == 1:
-            if suffix and not base_suffix:
-                return str(base_path.with_suffix(suffix))
-            return str(base_path)
-
-        batch_suffix = f"-faceswap-{index:03d}"
-        if suffix:
-            file_name = f"{base_stem}{batch_suffix}{suffix}"
-        else:
-            file_name = f"{base_stem}{batch_suffix}"
-        return str(base_path.with_name(file_name))
-
-    batch_suffix = f"-faceswap-{index:03d}"
-    file_name = f"{target_stem}{batch_suffix}{target_suffix}" if target_suffix else f"{target_stem}{batch_suffix}"
-    return str(target_path_obj.with_name(file_name))
 
 
 def stop() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
