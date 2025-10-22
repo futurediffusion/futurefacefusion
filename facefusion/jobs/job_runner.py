@@ -128,7 +128,16 @@ def run_steps(job_id : str, process_step : ProcessStep) -> bool:
             except Exception:
                 pass
 
+            try:
+                if hasattr(process_manager, '_pending'):
+                    process_manager._pending = False
+                if hasattr(process_manager, 'pending'):
+                    process_manager.pending = False
+            except Exception:
+                pass
+
             logger.info(f'🔵 [BATCH] Process manager reset complete for step {index}', __name__)
+            logger.info(f'🔵 [BATCH] is_pending after reset: {process_manager.is_pending()}', __name__)
 
             if not run_step(job_id, index, step, process_step):
                 return False
