@@ -1,4 +1,5 @@
 import itertools
+import os
 import shutil
 import signal
 import sys
@@ -16,7 +17,7 @@ from facefusion.content_analyser import analyse_image, analyse_video
 from facefusion.download import conditional_download_hashes, conditional_download_sources
 from facefusion.exit_helper import hard_exit, signal_exit
 from facefusion.ffmpeg import copy_image, extract_frames, finalize_image, merge_video, replace_audio, restore_audio
-from facefusion.filesystem import filter_audio_paths, get_file_name, is_image, is_video, resolve_file_paths, resolve_file_pattern
+from facefusion.filesystem import create_directory, filter_audio_paths, get_file_name, is_image, is_video, resolve_file_paths, resolve_file_pattern
 from facefusion.jobs import job_helper, job_manager, job_runner
 from facefusion.jobs.job_list import compose_job_list
 from facefusion.memory import limit_system_memory
@@ -299,6 +300,13 @@ def process_step(job_id : str, step_index : int, step_args : Args) -> bool:
     step_total = job_manager.count_step_total(job_id)
     step_args.update(collect_job_args())
     apply_args(step_args, state_manager.set_item)
+
+    output_path = state_manager.get_item('output_path')
+    if output_path:
+        output_directory = os.path.dirname(output_path)
+        if output_directory and not create_directory(output_directory):
+            logger.error(f'Unable to create output directory: {output_directory}', __name__)
+            return False
 
     logger.info(wording.get('processing_step').format(step_current = step_index + 1, step_total = step_total), __name__)
     if common_pre_check() and processors_pre_check():
