@@ -1,8 +1,6 @@
 import os
 
 from facefusion import logger
-from facefusion.ffmpeg import concat_video
-from facefusion.filesystem import are_images, are_videos, move_file, remove_file
 from facefusion.jobs import job_helper, job_manager
 from facefusion.types import JobOutputSet, JobStep, ProcessStep
 
@@ -55,47 +53,39 @@ def retry_jobs(process_step : ProcessStep, halt_on_error : bool) -> bool:
     return False
 
 
-def run_step(job_id : str, step_index : int, step : JobStep, process_step : ProcessStep) -> bool:
+def run_step(job_id: str, step_index: int, step: JobStep, process_step: ProcessStep) -> bool:
     step_args = step.get('args') or {}
     output_path = step_args.get('output_path')
-    logger.info(f'Starting step {step_index} with output_path: {output_path}', __name__)
 
-    if job_manager.set_step_status(job_id, step_index, 'started') and process_step(job_id, step_index, step_args):
-        if not output_path:
-            logger.error(f'No output path defined for step {step_index}', __name__)
-            job_manager.set_step_status(job_id, step_index, 'failed')
-            return False
+    logger.info(f'[BATCH DEBUG] Starting step {step_index} with output_path: {output_path}', __name__)
 
-        step_output_path = job_helper.get_step_output_path(job_id, step_index, output_path)
-        if not step_output_path:
-            logger.error(f'Unable to compose step output path for {output_path}', __name__)
-            job_manager.set_step_status(job_id, step_index, 'failed')
-            return False
+    if not job_manager.set_step_status(job_id, step_index, 'started'):
+        logger.error('[BATCH DEBUG] Failed to set step status to started', __name__)
+        return False
 
-        if not os.path.exists(output_path):
-            logger.error(f'Output file not found after processing: {output_path}', __name__)
-            job_manager.set_step_status(job_id, step_index, 'failed')
-            return False
-
-        if 'batch' in job_id.lower() and output_path == step_output_path:
-            logger.info(f'Batch step output already at final location: {output_path}', __name__)
-            return job_manager.set_step_status(job_id, step_index, 'completed')
-
-        step_output_dir = os.path.dirname(step_output_path)
-        if step_output_dir and not os.path.exists(step_output_dir):
-            os.makedirs(step_output_dir, exist_ok=True)
-
-        move_success = move_file(output_path, step_output_path)
-
-        if move_success:
-            logger.info(f'Step output saved to: {step_output_path}', __name__)
-            return job_manager.set_step_status(job_id, step_index, 'completed')
-        logger.error(f'Failed to move output from {output_path} to {step_output_path}', __name__)
+    if not process_step(job_id, step_index, step_args):
+        logger.error('[BATCH DEBUG] Process step failed', __name__)
         job_manager.set_step_status(job_id, step_index, 'failed')
         return False
 
-    job_manager.set_step_status(job_id, step_index, 'failed')
-    return False
+    if not output_path:
+        logger.error(f'[BATCH DEBUG] No output path defined for step {step_index}', __name__)
+        job_manager.set_step_status(job_id, step_index, 'failed')
+        return False
+
+    if not os.path.exists(output_path):
+        logger.error(f'[BATCH DEBUG] Output file NOT FOUND after processing: {output_path}', __name__)
+        output_dir = os.path.dirname(output_path)
+        if output_dir and os.path.exists(output_dir):
+            files_in_dir = os.listdir(output_dir)
+            logger.error(f'[BATCH DEBUG] Files in output directory: {files_in_dir}', __name__)
+        job_manager.set_step_status(job_id, step_index, 'failed')
+        return False
+
+    file_size = os.path.getsize(output_path)
+    logger.info(f'[BATCH DEBUG] SUCCESS! Output file exists: {output_path} ({file_size} bytes)', __name__)
+
+    return job_manager.set_step_status(job_id, step_index, 'completed')
 
 
 def run_steps(job_id : str, process_step : ProcessStep) -> bool:
@@ -109,35 +99,13 @@ def run_steps(job_id : str, process_step : ProcessStep) -> bool:
     return False
 
 
-def finalize_steps(job_id : str) -> bool:
-    output_set = collect_output_set(job_id)
-
-    if 'batch' in job_id.lower():
-        logger.info('Batch job completed - outputs already in final locations', __name__)
-        return True
-
-    for output_path, temp_output_paths in output_set.items():
-        if are_videos(temp_output_paths):
-            if not concat_video(output_path, temp_output_paths):
-                return False
-        if are_images(temp_output_paths):
-            for temp_output_path in temp_output_paths:
-                if not move_file(temp_output_path, output_path):
-                    return False
+def finalize_steps(job_id: str) -> bool:
+    logger.info('[BATCH DEBUG] Finalize steps - files already in final locations', __name__)
     return True
 
 
 def clean_steps(job_id: str) -> bool:
-    if 'batch' in job_id.lower():
-        logger.debug('Skipping cleanup for batch job', __name__)
-        return True
-
-    output_set = collect_output_set(job_id)
-
-    for temp_output_paths in output_set.values():
-        for temp_output_path in temp_output_paths:
-            if not remove_file(temp_output_path):
-                return False
+    logger.info('[BATCH DEBUG] Clean steps - skipping (files are final outputs)', __name__)
     return True
 
 
