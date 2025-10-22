@@ -110,10 +110,26 @@ def run_step(job_id: str, step_index: int, step: JobStep, process_step: ProcessS
 
 
 def run_steps(job_id : str, process_step : ProcessStep) -> bool:
+    from facefusion import logger, process_manager
+
     steps = job_manager.get_steps(job_id)
 
     if steps:
         for index, step in enumerate(steps):
+            logger.info(f'🔵 [BATCH] Resetting process_manager before step {index}', __name__)
+
+            try:
+                process_manager.end()
+            except Exception:
+                pass
+
+            try:
+                process_manager.start()
+            except Exception:
+                pass
+
+            logger.info(f'🔵 [BATCH] Process manager reset complete for step {index}', __name__)
+
             if not run_step(job_id, index, step, process_step):
                 return False
         return True
