@@ -77,9 +77,13 @@ def run_step(job_id : str, step_index : int, step : JobStep, process_step : Proc
             job_manager.set_step_status(job_id, step_index, 'failed')
             return False
 
+        if 'batch' in job_id.lower() and output_path == step_output_path:
+            logger.info(f'Batch step output already at final location: {output_path}', __name__)
+            return job_manager.set_step_status(job_id, step_index, 'completed')
+
         step_output_dir = os.path.dirname(step_output_path)
         if step_output_dir and not os.path.exists(step_output_dir):
-            os.makedirs(step_output_dir, exist_ok = True)
+            os.makedirs(step_output_dir, exist_ok=True)
 
         move_success = move_file(output_path, step_output_path)
 
@@ -108,6 +112,10 @@ def run_steps(job_id : str, process_step : ProcessStep) -> bool:
 def finalize_steps(job_id : str) -> bool:
     output_set = collect_output_set(job_id)
 
+    if 'batch' in job_id.lower():
+        logger.info('Batch job completed - outputs already in final locations', __name__)
+        return True
+
     for output_path, temp_output_paths in output_set.items():
         if are_videos(temp_output_paths):
             if not concat_video(output_path, temp_output_paths):
@@ -120,6 +128,10 @@ def finalize_steps(job_id : str) -> bool:
 
 
 def clean_steps(job_id: str) -> bool:
+    if 'batch' in job_id.lower():
+        logger.debug('Skipping cleanup for batch job', __name__)
+        return True
+
     output_set = collect_output_set(job_id)
 
     for temp_output_paths in output_set.values():
@@ -138,5 +150,6 @@ def collect_output_set(job_id : str) -> JobOutputSet:
 
         if output_path:
             step_output_path = job_helper.get_step_output_path(job_id, index, output_path)
-            job_output_set.setdefault(output_path, []).append(step_output_path)
+            if step_output_path:
+                job_output_set.setdefault(output_path, []).append(step_output_path)
     return job_output_set
