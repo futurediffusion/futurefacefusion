@@ -2,12 +2,9 @@ from pathlib import Path
 
 import pytest
 
-instant_runner = pytest.importorskip(
-    'facefusion.uis.components.instant_runner',
-    reason = 'gradio is required for UI instant runner tests'
-)
+pytest.importorskip('cv2', reason = 'cv2 is required for batch helper tests')
 
-compose_batch_output_path = instant_runner.compose_batch_output_path
+from facefusion.batch_helper import compose_batch_output_path
 
 
 def test_compose_batch_output_path_uses_nonexistent_directory(tmp_path) -> None:
