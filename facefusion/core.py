@@ -429,7 +429,19 @@ def process_image(start_time : float) -> ErrorCode:
 
     write_image(temp_image_path, temp_vision_frame)
     if is_process_stopping():
-        return 4
+        import inspect
+        frame = inspect.currentframe()
+        try:
+            caller_locals = frame.f_back.f_locals if frame and frame.f_back else {}
+            job_id = caller_locals.get('job_id', '')
+            command = state_manager.get_item('command') or ''
+            is_batch_job = 'batch' in str(job_id).lower() or 'batch' in str(command).lower()
+            if not is_batch_job:
+                logger.debug('[BATCH DEBUG] Process stopping detected (non-batch job)', __name__)
+                return 4
+            logger.debug('[BATCH DEBUG] Process stopping signal ignored for batch job', __name__)
+        finally:
+            del frame
 
     logger.info(wording.get('finalizing_image').format(resolution = pack_resolution(output_image_resolution)), __name__)
     if finalize_image(state_manager.get_item('target_path'), state_manager.get_item('output_path'), output_image_resolution):
