@@ -82,6 +82,19 @@ def run_step(job_id: str, step_index: int, step: JobStep, process_step: ProcessS
         job_manager.set_step_status(job_id, step_index, 'failed')
         return False
 
+    logger.debug(f'[BATCH DEBUG] Forcing cleanup after step {step_index}', __name__)
+
+    import gc
+
+    gc.collect()
+
+    target_path = step_args.get('target_path')
+    if target_path:
+        from facefusion.temp_helper import clear_temp_directory
+
+        logger.debug(f'[BATCH DEBUG] Clearing temp directory for step {step_index}: {target_path}', __name__)
+        clear_temp_directory(target_path)
+
     file_size = os.path.getsize(output_path)
     logger.info(f'[BATCH DEBUG] SUCCESS! Output file exists: {output_path} ({file_size} bytes)', __name__)
 
