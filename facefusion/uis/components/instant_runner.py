@@ -178,19 +178,22 @@ def compose_batch_output_path(base_output_path : Optional[str], target_path : st
     target_suffix = target_path_obj.suffix or ''
     target_stem = target_path_obj.stem or f'target-{index:03d}'
 
-    if base_output_path and is_directory(base_output_path):
-        directory_path = Path(base_output_path)
-        suffix = target_suffix
-        batch_suffix = f'-{index:03d}' if total > 1 else ''
-        file_name = f"{target_stem}-faceswap{batch_suffix}{suffix}"
-        return str(directory_path / file_name)
-
     if base_output_path:
         base_path = Path(base_output_path)
-        suffix = base_path.suffix or target_suffix
+        base_suffix = base_path.suffix
         base_stem = base_path.stem or target_stem
 
+        if is_directory(base_output_path) or (not base_suffix and not base_path.exists()):
+            directory_path = base_path
+            suffix = target_suffix or base_suffix
+            batch_suffix = f'-{index:03d}' if total > 1 else ''
+            file_name = f"{target_stem}-faceswap{batch_suffix}{suffix}"
+            return str(directory_path / file_name)
+
+        suffix = base_suffix or target_suffix
         if total == 1:
+            if suffix and not base_suffix:
+                return str(base_path.with_suffix(suffix))
             return str(base_path)
 
         batch_suffix = f"-faceswap-{index:03d}"
