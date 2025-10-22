@@ -318,15 +318,27 @@ def process_step(job_id : str, step_index : int, step_args : Args) -> bool:
     apply_args(step_args, state_manager.set_item)
 
     output_path = state_manager.get_item('output_path')
-    if output_path:
-        output_directory = os.path.dirname(output_path)
-        if output_directory and not create_directory(output_directory):
+    if not output_path:
+        logger.error(f'Output path not set for step {step_index + 1}', __name__)
+        return False
+
+    output_directory = os.path.dirname(output_path)
+    if output_directory:
+        if not create_directory(output_directory):
             logger.error(f'Unable to create output directory: {output_directory}', __name__)
             return False
 
-    logger.info(wording.get('processing_step').format(step_current = step_index + 1, step_total = step_total), __name__)
+    logger.info(f'Processing step {step_index + 1}/{step_total} -> Output: {output_path}', __name__)
+
     if common_pre_check() and processors_pre_check():
         error_code = conditional_process()
+
+        if error_code == 0:
+            if os.path.exists(output_path):
+                logger.info(f'Step {step_index + 1} completed. Output saved to: {output_path}', __name__)
+                return True
+            logger.error(f'Output file was not created: {output_path}', __name__)
+            return False
         return error_code == 0
     return False
 
@@ -403,10 +415,16 @@ def process_image(start_time : float) -> ErrorCode:
     logger.debug(wording.get('clearing_temp'), __name__)
     clear_temp_directory(state_manager.get_item('target_path'))
 
-    if is_image(state_manager.get_item('output_path')):
+    final_output_path = state_manager.get_item('output_path')
+    if is_image(final_output_path) and os.path.exists(final_output_path):
+        file_size = os.path.getsize(final_output_path)
         logger.info(wording.get('processing_image_succeeded').format(seconds = calculate_end_time(start_time)), __name__)
+        logger.debug(f'Output file size: {file_size} bytes', __name__)
     else:
-        logger.error(wording.get('processing_image_failed'), __name__)
+        logger.error(f'Processing image failed - output not found: {final_output_path}', __name__)
+        temp_file = get_temp_file_path(state_manager.get_item('target_path'))
+        if os.path.exists(temp_file):
+            logger.error(f'Temp file exists but final output missing. Temp: {temp_file}', __name__)
         process_manager.end()
         return 1
     process_manager.end()

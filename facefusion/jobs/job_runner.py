@@ -1,3 +1,6 @@
+import os
+
+from facefusion import logger
 from facefusion.ffmpeg import concat_video
 from facefusion.filesystem import are_images, are_videos, move_file, remove_file
 from facefusion.jobs import job_helper, job_manager
@@ -5,108 +8,135 @@ from facefusion.types import JobOutputSet, JobStep, ProcessStep
 
 
 def run_job(job_id : str, process_step : ProcessStep) -> bool:
-	queued_job_ids = job_manager.find_job_ids('queued')
+    queued_job_ids = job_manager.find_job_ids('queued')
 
-	if job_id in queued_job_ids:
-		if run_steps(job_id, process_step) and finalize_steps(job_id):
-			clean_steps(job_id)
-			return job_manager.move_job_file(job_id, 'completed')
-		clean_steps(job_id)
-		job_manager.move_job_file(job_id, 'failed')
-	return False
+    if job_id in queued_job_ids:
+        if run_steps(job_id, process_step) and finalize_steps(job_id):
+            clean_steps(job_id)
+            return job_manager.move_job_file(job_id, 'completed')
+        clean_steps(job_id)
+        job_manager.move_job_file(job_id, 'failed')
+    return False
 
 
 def run_jobs(process_step : ProcessStep, halt_on_error : bool) -> bool:
-	queued_job_ids = job_manager.find_job_ids('queued')
-	has_error = False
+    queued_job_ids = job_manager.find_job_ids('queued')
+    has_error = False
 
-	if queued_job_ids:
-		for job_id in queued_job_ids:
-			if not run_job(job_id, process_step):
-				has_error = True
-				if halt_on_error:
-					return False
-		return not has_error
-	return False
+    if queued_job_ids:
+        for job_id in queued_job_ids:
+            if not run_job(job_id, process_step):
+                has_error = True
+                if halt_on_error:
+                    return False
+        return not has_error
+    return False
 
 
 def retry_job(job_id : str, process_step : ProcessStep) -> bool:
-	failed_job_ids = job_manager.find_job_ids('failed')
+    failed_job_ids = job_manager.find_job_ids('failed')
 
-	if job_id in failed_job_ids:
-		return job_manager.set_steps_status(job_id, 'queued') and job_manager.move_job_file(job_id, 'queued') and run_job(job_id, process_step)
-	return False
+    if job_id in failed_job_ids:
+        return job_manager.set_steps_status(job_id, 'queued') and job_manager.move_job_file(job_id, 'queued') and run_job(job_id, process_step)
+    return False
 
 
 def retry_jobs(process_step : ProcessStep, halt_on_error : bool) -> bool:
-	failed_job_ids = job_manager.find_job_ids('failed')
-	has_error = False
+    failed_job_ids = job_manager.find_job_ids('failed')
+    has_error = False
 
-	if failed_job_ids:
-		for job_id in failed_job_ids:
-			if not retry_job(job_id, process_step):
-				has_error = True
-				if halt_on_error:
-					return False
-		return not has_error
-	return False
+    if failed_job_ids:
+        for job_id in failed_job_ids:
+            if not retry_job(job_id, process_step):
+                has_error = True
+                if halt_on_error:
+                    return False
+        return not has_error
+    return False
 
 
 def run_step(job_id : str, step_index : int, step : JobStep, process_step : ProcessStep) -> bool:
-	step_args = step.get('args')
+    step_args = step.get('args') or {}
+    output_path = step_args.get('output_path')
+    logger.info(f'Starting step {step_index} with output_path: {output_path}', __name__)
 
-	if job_manager.set_step_status(job_id, step_index, 'started') and process_step(job_id, step_index, step_args):
-		output_path = step_args.get('output_path')
-		step_output_path = job_helper.get_step_output_path(job_id, step_index, output_path)
+    if job_manager.set_step_status(job_id, step_index, 'started') and process_step(job_id, step_index, step_args):
+        if not output_path:
+            logger.error(f'No output path defined for step {step_index}', __name__)
+            job_manager.set_step_status(job_id, step_index, 'failed')
+            return False
 
-		return move_file(output_path, step_output_path) and job_manager.set_step_status(job_id, step_index, 'completed')
-	job_manager.set_step_status(job_id, step_index, 'failed')
-	return False
+        step_output_path = job_helper.get_step_output_path(job_id, step_index, output_path)
+        if not step_output_path:
+            logger.error(f'Unable to compose step output path for {output_path}', __name__)
+            job_manager.set_step_status(job_id, step_index, 'failed')
+            return False
+
+        if not os.path.exists(output_path):
+            logger.error(f'Output file not found after processing: {output_path}', __name__)
+            job_manager.set_step_status(job_id, step_index, 'failed')
+            return False
+
+        step_output_dir = os.path.dirname(step_output_path)
+        if step_output_dir and not os.path.exists(step_output_dir):
+            os.makedirs(step_output_dir, exist_ok = True)
+
+        move_success = move_file(output_path, step_output_path)
+
+        if move_success:
+            logger.info(f'Step output saved to: {step_output_path}', __name__)
+            return job_manager.set_step_status(job_id, step_index, 'completed')
+        logger.error(f'Failed to move output from {output_path} to {step_output_path}', __name__)
+        job_manager.set_step_status(job_id, step_index, 'failed')
+        return False
+
+    job_manager.set_step_status(job_id, step_index, 'failed')
+    return False
 
 
 def run_steps(job_id : str, process_step : ProcessStep) -> bool:
-	steps = job_manager.get_steps(job_id)
+    steps = job_manager.get_steps(job_id)
 
-	if steps:
-		for index, step in enumerate(steps):
-			if not run_step(job_id, index, step, process_step):
-				return False
-		return True
-	return False
+    if steps:
+        for index, step in enumerate(steps):
+            if not run_step(job_id, index, step, process_step):
+                return False
+        return True
+    return False
 
 
 def finalize_steps(job_id : str) -> bool:
-	output_set = collect_output_set(job_id)
+    output_set = collect_output_set(job_id)
 
-	for output_path, temp_output_paths in output_set.items():
-		if are_videos(temp_output_paths):
-			if not concat_video(output_path, temp_output_paths):
-				return False
-		if are_images(temp_output_paths):
-			for temp_output_path in temp_output_paths:
-				if not move_file(temp_output_path, output_path):
-					return False
-	return True
+    for output_path, temp_output_paths in output_set.items():
+        if are_videos(temp_output_paths):
+            if not concat_video(output_path, temp_output_paths):
+                return False
+        if are_images(temp_output_paths):
+            for temp_output_path in temp_output_paths:
+                if not move_file(temp_output_path, output_path):
+                    return False
+    return True
 
 
 def clean_steps(job_id: str) -> bool:
-	output_set = collect_output_set(job_id)
+    output_set = collect_output_set(job_id)
 
-	for temp_output_paths in output_set.values():
-		for temp_output_path in temp_output_paths:
-			if not remove_file(temp_output_path):
-				return False
-	return True
+    for temp_output_paths in output_set.values():
+        for temp_output_path in temp_output_paths:
+            if not remove_file(temp_output_path):
+                return False
+    return True
 
 
 def collect_output_set(job_id : str) -> JobOutputSet:
-	steps = job_manager.get_steps(job_id)
-	job_output_set : JobOutputSet = {}
+    steps = job_manager.get_steps(job_id)
+    job_output_set : JobOutputSet = {}
 
-	for index, step in enumerate(steps):
-		output_path = step.get('args').get('output_path')
+    for index, step in enumerate(steps):
+        output_path = step.get('args').get('output_path')
 
-		if output_path:
-			step_output_path = job_manager.get_step_output_path(job_id, index, output_path)
-			job_output_set.setdefault(output_path, []).append(step_output_path)
-	return job_output_set
+        if output_path:
+            step_output_path = job_helper.get_step_output_path(job_id, index, output_path)
+            job_output_set.setdefault(output_path, []).append(step_output_path)
+    return job_output_set
