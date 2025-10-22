@@ -76,20 +76,57 @@ def start() -> Tuple[gradio.Button, gradio.Button]:
 
 def run() -> Tuple[gradio.Button, gradio.Button, gradio.Image, gradio.Video]:
     step_args = collect_step_args()
-    target_paths : List[str] = step_args.get('target_paths') or []
+    target_paths: List[str] = step_args.get('target_paths') or []
     output_path = step_args.get('output_path')
+    display_output_path: Optional[str] = step_args.get('output_path')
 
-    if len(target_paths) <= 1 and is_directory(step_args.get('output_path')):
-        step_args['output_path'] = suggest_output_path(step_args.get('output_path'), state_manager.get_item('target_path'))
+    if output_path and len(target_paths) <= 1 and is_directory(output_path):
+        suggested_output_path = suggest_output_path(output_path, state_manager.get_item('target_path'))
+        if suggested_output_path:
+            step_args['output_path'] = suggested_output_path
+            display_output_path = suggested_output_path
+
     if job_manager.init_jobs(state_manager.get_item('jobs_path')):
         create_and_run_job(step_args)
+        if len(target_paths) > 1:
+            display_output_path = resolve_batch_preview_output_path(output_path, target_paths)
+        else:
+            display_output_path = step_args.get('output_path')
         step_args['output_path'] = output_path
         state_manager.set_item('output_path', output_path)
-    if is_image(step_args.get('output_path')):
-        return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = step_args.get('output_path'), visible = True), gradio.Video(value = None, visible = False)
-    if is_video(step_args.get('output_path')):
-        return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None, visible = False), gradio.Video(value = step_args.get('output_path'), visible = True)
-    return gradio.Button(visible = True), gradio.Button(visible = False), gradio.Image(value = None), gradio.Video(value = None)
+
+    if display_output_path and is_image(display_output_path):
+        return (
+            gradio.Button(visible = True),
+            gradio.Button(visible = False),
+            gradio.Image(value = display_output_path, visible = True),
+            gradio.Video(value = None, visible = False)
+        )
+    if display_output_path and is_video(display_output_path):
+        return (
+            gradio.Button(visible = True),
+            gradio.Button(visible = False),
+            gradio.Image(value = None, visible = False),
+            gradio.Video(value = display_output_path, visible = True)
+        )
+    return (
+        gradio.Button(visible = True),
+        gradio.Button(visible = False),
+        gradio.Image(value = None),
+        gradio.Video(value = None)
+    )
+
+
+def resolve_batch_preview_output_path(base_output_path: Optional[str], target_paths: List[str]) -> Optional[str]:
+    if not base_output_path:
+        return None
+
+    total = len(target_paths)
+    for index, target_path in enumerate(target_paths):
+        candidate_path = compose_batch_output_path(base_output_path, target_path, index, total)
+        if is_image(candidate_path) or is_video(candidate_path):
+            return candidate_path
+    return None
 
 
 def create_and_run_job(step_args : Args) -> bool:
