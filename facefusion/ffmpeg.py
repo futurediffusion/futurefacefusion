@@ -1,3 +1,4 @@
+import io
 import os
 import subprocess
 import tempfile
@@ -41,9 +42,23 @@ def run_ffmpeg_with_progress(commands : Commands, update_progress : UpdateProgre
     if process_manager.is_stopping():
         process.terminate()
     else:
+        stdout_buffer : bytes = b''
+        stderr_buffer : Optional[bytes] = None
+
+        if process.stdout or process.stderr:
+            stdout_data, stderr_data = process.communicate()
+            stdout_buffer = stdout_data or b''
+            stderr_buffer = stderr_data or b''
+
+            if process.stdout is not None:
+                process.stdout = io.BytesIO(stdout_buffer)
+            if process.stderr is not None:
+                process.stderr = io.BytesIO(stderr_buffer)
+        else:
+            process.wait()
+
         if log_level == 'debug':
-            log_debug(process)
-        process.wait()
+            log_debug(process, stderr_buffer)
 
     return process
 
@@ -69,9 +84,23 @@ def run_ffmpeg(commands : Commands) -> subprocess.Popen[bytes]:
     if process_manager.is_stopping():
         process.terminate()
     else:
+        stdout_buffer : bytes = b''
+        stderr_buffer : Optional[bytes] = None
+
+        if process.stdout or process.stderr:
+            stdout_data, stderr_data = process.communicate()
+            stdout_buffer = stdout_data or b''
+            stderr_buffer = stderr_data or b''
+
+            if process.stdout is not None:
+                process.stdout = io.BytesIO(stdout_buffer)
+            if process.stderr is not None:
+                process.stderr = io.BytesIO(stderr_buffer)
+        else:
+            process.wait()
+
         if log_level == 'debug':
-            log_debug(process)
-        process.wait()
+            log_debug(process, stderr_buffer)
 
     return process
 
@@ -81,9 +110,14 @@ def open_ffmpeg(commands : Commands) -> subprocess.Popen[bytes]:
     return subprocess.Popen(commands, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
 
 
-def log_debug(process : subprocess.Popen[bytes]) -> None:
-    _, stderr = process.communicate()
-    errors = stderr.decode().split(os.linesep)
+def log_debug(process : subprocess.Popen[bytes], stderr_buffer : Optional[bytes] = None) -> None:
+    if stderr_buffer is None:
+        _, stderr_buffer = process.communicate()
+
+    if not stderr_buffer:
+        return
+
+    errors = stderr_buffer.decode().split(os.linesep)
 
     for error in errors:
         if error.strip():
