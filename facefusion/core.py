@@ -367,6 +367,10 @@ def process_step(job_id : str, step_index : int, step_args : Args) -> bool:
 def conditional_process() -> ErrorCode:
     start_time = time()
 
+    logger.debug('[BATCH DEBUG] conditional_process starting', __name__)
+    logger.debug(f'[BATCH DEBUG] process_manager.is_stopping(): {process_manager.is_stopping()}', __name__)
+    logger.debug(f'[BATCH DEBUG] process_manager.is_pending(): {process_manager.is_pending()}', __name__)
+
     for processor_module in get_processors_modules(state_manager.get_item('processors')):
         if not processor_module.pre_process('output'):
             return 2
@@ -465,7 +469,6 @@ def process_image(start_time : float) -> ErrorCode:
             logger.error(f'Temp file exists but final output missing. Temp: {temp_file}', __name__)
         process_manager.end()
         return 1
-    process_manager.end()
     return 0
 
 
@@ -606,7 +609,13 @@ def process_temp_frame(temp_frame_path : str, frame_number : int) -> bool:
 
 
 def is_process_stopping() -> bool:
-    if process_manager.is_stopping():
+    is_stopping = process_manager.is_stopping()
+    is_pending = process_manager.is_pending()
+
+    if is_stopping:
+        logger.debug('[BATCH DEBUG] is_process_stopping: TRUE - stopping process', __name__)
         process_manager.end()
         logger.info(wording.get('processing_stopped'), __name__)
-    return process_manager.is_pending()
+
+    logger.debug(f'[BATCH DEBUG] is_pending: {is_pending}', __name__)
+    return is_pending
