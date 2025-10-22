@@ -317,30 +317,51 @@ def process_step(job_id : str, step_index : int, step_args : Args) -> bool:
     step_args.update(collect_job_args())
     apply_args(step_args, state_manager.set_item)
 
+    logger.info(f"[BATCH DEBUG] Step {step_index + 1} arguments:", __name__)
+    logger.info(f"[BATCH DEBUG]   source_paths: {state_manager.get_item('source_paths')}", __name__)
+    logger.info(f"[BATCH DEBUG]   target_path: {state_manager.get_item('target_path')}", __name__)
+    logger.info(f"[BATCH DEBUG]   output_path: {state_manager.get_item('output_path')}", __name__)
+
     output_path = state_manager.get_item('output_path')
     if not output_path:
-        logger.error(f'Output path not set for step {step_index + 1}', __name__)
+        logger.error(f"[BATCH DEBUG] Output path not set for step {step_index + 1}", __name__)
         return False
 
     output_directory = os.path.dirname(output_path)
     if output_directory:
         if not create_directory(output_directory):
-            logger.error(f'Unable to create output directory: {output_directory}', __name__)
+            logger.error(f"[BATCH DEBUG] Unable to create output directory: {output_directory}", __name__)
             return False
 
-    logger.info(f'Processing step {step_index + 1}/{step_total} -> Output: {output_path}', __name__)
+    logger.info(f"Processing step {step_index + 1}/{step_total} -> Output: {output_path}", __name__)
 
-    if common_pre_check() and processors_pre_check():
+    try:
+        if not common_pre_check():
+            logger.error(f"[BATCH DEBUG] common_pre_check FAILED for step {step_index + 1}", __name__)
+            return False
+
+        if not processors_pre_check():
+            logger.error(f"[BATCH DEBUG] processors_pre_check FAILED for step {step_index + 1}", __name__)
+            return False
+
         error_code = conditional_process()
 
-        if error_code == 0:
-            if os.path.exists(output_path):
-                logger.info(f'Step {step_index + 1} completed. Output saved to: {output_path}', __name__)
-                return True
-            logger.error(f'Output file was not created: {output_path}', __name__)
+        if error_code != 0:
+            logger.error(f"[BATCH DEBUG] conditional_process returned error code: {error_code} for step {step_index + 1}", __name__)
             return False
-        return error_code == 0
-    return False
+
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            logger.info(f"[BATCH DEBUG] Step {step_index + 1} SUCCESS - saved: {output_path} ({file_size} bytes)", __name__)
+            return True
+
+        logger.error(f"[BATCH DEBUG] Output file NOT created: {output_path}", __name__)
+        return False
+    except Exception as error:
+        logger.error(f"[BATCH DEBUG] EXCEPTION in process_step for step {step_index + 1}: {error}", __name__)
+        import traceback
+        logger.error(f"[BATCH DEBUG] Traceback: {traceback.format_exc()}", __name__)
+        return False
 
 
 def conditional_process() -> ErrorCode:
@@ -431,6 +452,12 @@ def process_image(start_time : float) -> ErrorCode:
         file_size = os.path.getsize(final_output_path)
         logger.info(wording.get('processing_image_succeeded').format(seconds = calculate_end_time(start_time)), __name__)
         logger.debug(f'Output file size: {file_size} bytes', __name__)
+        logger.debug('[BATCH DEBUG] Cleaning up after image processing', __name__)
+        read_static_image.cache_clear()
+        video_manager.clear_video_pool()
+        if not state_manager.get_item('keep_temp'):
+            logger.debug('[BATCH DEBUG] Clearing temp directory', __name__)
+            clear_temp_directory(state_manager.get_item('target_path'))
     else:
         logger.error(f'Processing image failed - output not found: {final_output_path}', __name__)
         temp_file = get_temp_file_path(state_manager.get_item('target_path'))
