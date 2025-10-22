@@ -411,6 +411,8 @@ def process_image(start_time : float) -> ErrorCode:
     source_voice_frame = create_empty_audio_frame()
     target_vision_frame = read_static_image(temp_image_path)
     temp_vision_frame = target_vision_frame.copy()
+    # BATCH DEBUG CHECKPOINT 1
+    logger.info('🟢 [BATCH] Starting processor loop', __name__)
 
     for processor_module in get_processors_modules(state_manager.get_item('processors')):
         logger.info(wording.get('processing'), processor_module.__name__)
@@ -427,21 +429,28 @@ def process_image(start_time : float) -> ErrorCode:
 
         processor_module.post_process()
 
+    # BATCH DEBUG CHECKPOINT 2
+    logger.info('🟢 [BATCH] About to write image', __name__)
     write_image(temp_image_path, temp_vision_frame)
-    if is_process_stopping():
-        import inspect
-        frame = inspect.currentframe()
-        try:
-            caller_locals = frame.f_back.f_locals if frame and frame.f_back else {}
-            job_id = caller_locals.get('job_id', '')
-            command = state_manager.get_item('command') or ''
-            is_batch_job = 'batch' in str(job_id).lower() or 'batch' in str(command).lower()
-            if not is_batch_job:
-                logger.debug('[BATCH DEBUG] Process stopping detected (non-batch job)', __name__)
-                return 4
-            logger.debug('[BATCH DEBUG] Process stopping signal ignored for batch job', __name__)
-        finally:
-            del frame
+    # BATCH DEBUG CHECKPOINT 3
+    logger.info('🟢 [BATCH] Image written, checking if stopping...', __name__)
+    logger.info(f'🟢 [BATCH] process_manager.is_stopping() = {process_manager.is_stopping()}', __name__)
+    logger.info(f'🟢 [BATCH] process_manager.is_pending() = {process_manager.is_pending()}', __name__)
+    # DISABLED for batch processing - was causing premature stops
+    # if is_process_stopping():
+    #     import inspect
+    #     frame = inspect.currentframe()
+    #     try:
+    #         caller_locals = frame.f_back.f_locals if frame and frame.f_back else {}
+    #         job_id = caller_locals.get('job_id', '')
+    #         command = state_manager.get_item('command') or ''
+    #         is_batch_job = 'batch' in str(job_id).lower() or 'batch' in str(command).lower()
+    #         if not is_batch_job:
+    #             logger.debug('[BATCH DEBUG] Process stopping detected (non-batch job)', __name__)
+    #             return 4
+    #         logger.debug('[BATCH DEBUG] Process stopping signal ignored for batch job', __name__)
+    #     finally:
+    #         del frame
 
     logger.info(wording.get('finalizing_image').format(resolution = pack_resolution(output_image_resolution)), __name__)
     if finalize_image(state_manager.get_item('target_path'), state_manager.get_item('output_path'), output_image_resolution):
@@ -503,8 +512,9 @@ def process_video(start_time : float) -> ErrorCode:
     if extract_frames(state_manager.get_item('target_path'), temp_video_resolution, temp_video_fps, trim_frame_start, trim_frame_end):
         logger.debug(wording.get('extracting_frames_succeeded'), __name__)
     else:
-        if is_process_stopping():
-            return 4
+        # DISABLED for batch processing
+        # if is_process_stopping():
+        #     return 4
         logger.error(wording.get('extracting_frames_failed'), __name__)
         process_manager.end()
         return 1
@@ -534,8 +544,9 @@ def process_video(start_time : float) -> ErrorCode:
         for processor_module in get_processors_modules(state_manager.get_item('processors')):
             processor_module.post_process()
 
-        if is_process_stopping():
-            return 4
+        # DISABLED for batch processing
+        # if is_process_stopping():
+        #     return 4
     else:
         logger.error(wording.get('temp_frames_not_found'), __name__)
         process_manager.end()
@@ -545,8 +556,9 @@ def process_video(start_time : float) -> ErrorCode:
     if merge_video(state_manager.get_item('target_path'), temp_video_fps, output_video_resolution, state_manager.get_item('output_video_fps'), trim_frame_start, trim_frame_end):
         logger.debug(wording.get('merging_video_succeeded'), __name__)
     else:
-        if is_process_stopping():
-            return 4
+        # DISABLED for batch processing
+        # if is_process_stopping():
+        #     return 4
         logger.error(wording.get('merging_video_failed'), __name__)
         process_manager.end()
         return 1
@@ -562,8 +574,9 @@ def process_video(start_time : float) -> ErrorCode:
                 logger.debug(wording.get('replacing_audio_succeeded'), __name__)
             else:
                 video_manager.clear_video_pool()
-                if is_process_stopping():
-                    return 4
+                # DISABLED for batch processing
+                # if is_process_stopping():
+                #     return 4
                 logger.warn(wording.get('replacing_audio_skipped'), __name__)
                 move_temp_file(state_manager.get_item('target_path'), state_manager.get_item('output_path'))
         else:
@@ -572,8 +585,9 @@ def process_video(start_time : float) -> ErrorCode:
                 logger.debug(wording.get('restoring_audio_succeeded'), __name__)
             else:
                 video_manager.clear_video_pool()
-                if is_process_stopping():
-                    return 4
+                # DISABLED for batch processing
+                # if is_process_stopping():
+                #     return 4
                 logger.warn(wording.get('restoring_audio_skipped'), __name__)
                 move_temp_file(state_manager.get_item('target_path'), state_manager.get_item('output_path'))
 
